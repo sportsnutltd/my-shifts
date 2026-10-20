@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sports Nut - My Shifts</title>
+<style>
+  :root {
+    --navy: #1F2A44; --navy-soft: #E8EBF3; --lavender: #E4DFF5; --ink: #2B2B2B;
+    --muted: #6B7280; --line: #D9DCE3; --bg: #F6F7FB; --teal: #0F8F80; --danger: #A33A3A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; font-size: 16px; }
+  header { background: var(--navy); color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  header h1 { margin: 0; font-size: 19px; flex: 1; }
+  header button { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.5);
+    border-radius: 8px; padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+  label { display: block; font-weight: 600; margin: 12px 0 6px; }
+  input[type=text], input[type=password] { width: 100%; font-size: 18px; padding: 12px;
+    border: 1px solid var(--line); border-radius: 10px; }
+  .check { display: flex; gap: 8px; align-items: center; font-weight: 400; margin-top: 12px; }
+  .check input { width: 20px; height: 20px; }
+  .btn { background: var(--navy); color: #fff; border: none; border-radius: 12px; padding: 14px 20px;
+    font: inherit; font-weight: 700; font-size: 17px; width: 100%; margin-top: 14px; cursor: pointer; }
+  .btn:disabled { opacity: .5; }
+  .err { color: var(--danger); font-weight: 600; min-height: 1.2em; margin-top: 10px; }
+  .muted { color: var(--muted); font-size: 14px; }
+  .hidden { display: none !important; }
+
+  .monthbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .monthbar button { background: var(--navy-soft); color: var(--navy); border: none; border-radius: 10px;
+    padding: 10px 16px; font: inherit; font-weight: 700; font-size: 18px; cursor: pointer; }
+  .monthbar button:disabled { opacity: .35; cursor: default; }
+  .monthbar h2 { flex: 1; text-align: center; margin: 0; font-size: 20px; }
+  .totals { display: flex; gap: 10px; margin-bottom: 14px; }
+  .tot { flex: 1; background: var(--lavender); border-radius: 12px; padding: 12px; text-align: center; }
+  .tot b { display: block; font-size: 24px; }
+  .tot span { font-size: 13px; color: var(--muted); }
+
+  .dayhead { background: var(--lavender); border-radius: 8px; padding: 6px 12px; font-weight: 700;
+    font-size: 14px; margin: 16px 0 8px; }
+  .shift { background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--navy);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; display: flex; gap: 12px; align-items: center; }
+  .shift .main { flex: 1; }
+  .shift .time { font-size: 18px; font-weight: 700; }
+  .shift .hrs { font-weight: 700; white-space: nowrap; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 8px; padding: 2px 8px; margin-top: 5px; }
+  .b-cover { background: #DDF3EF; color: #0B6B60; }
+  .b-off { background: #EEE; color: #555; }
+  .shift.covering { border-left-color: var(--teal); }
+  .shift.off { border-left-color: #BBB; color: #888; background: #FAFAFA; }
+  .shift.off .time { text-decoration: line-through; }
+  .empty { text-align: center; padding: 30px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sports Nut &middot; My Shifts</h1>
+  <button id="btnOut" class="hidden">Log out</button>
+</header>
+<main>
+  <section id="scrLogin" class="card">
+    <h2 style="margin-top:0">Log in</h2>
+    <p class="muted">Use your first name as it appears on the rota, and the PIN you were given.</p>
+    <label for="name">First name</label>
+    <input type="text" id="name" autocomplete="username" autocapitalize="words">
+    <label for="pin">PIN</label>
+    <input type="password" id="pin" inputmode="numeric" autocomplete="current-password">
+    <label class="check"><input type="checkbox" id="remember" checked> Remember me on this device</label>
+    <div class="err" id="err"></div>
+    <button class="btn" id="btnLogin">Show my shifts</button>
+  </section>
+
+  <section id="scrShifts" class="hidden">
+    <p id="hello" style="margin-top:0;font-weight:700"></p>
+    <div class="monthbar">
+      <button id="prev" aria-label="Previous month">&#9664;</button>
+      <h2 id="monthTitle"></h2>
+      <button id="next" aria-label="Next month">&#9654;</button>
+    </div>
+    <div class="totals">
+      <div class="tot"><b id="totShifts">0</b><span>shifts</span></div>
+      <div class="tot"><b id="totHours">0</b><span>hours</span></div>
+    </div>
+    <div id="list"></div>
+    <p class="muted" style="margin-top:18px">Shifts are shown exactly as they are on the rota. If something looks wrong, please speak to Mark.
+      Hours don't include shifts that were cancelled or covered by someone else.</p>
+  </section>
+</main>
+
+<script>
+/* ===================== SETTINGS ===================== */
+const API_URL = 'https://script.google.com/macros/s/AKfycbwgY5XqKxzuUUTviSB3Cml-CN8a3LrKMElP5aIvESjn3q5G7r8JW8YjZDTn-eINrwes/exec';
+/* ==================================================== */
+
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const $ = id => document.getElementById(id);
+const S = { name: '', shifts: [], months: [], idx: 0 };
+
+function store(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// "02/10/2026" -> Date
+function parseDate(t) {
+  const m = String(t).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (!m) return null;
+  const y = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+  return new Date(y, Number(m[2]) - 1, Number(m[1]));
+}
+function monthKey(d) { return d.getFullYear() * 100 + d.getMonth(); }
+function num(h) { const n = parseFloat(String(h).replace(',', '.')); return isNaN(n) ? 0 : n; }
+function isCancelled(s) { return /cancel/i.test(s.status); }
+
+async function login(name, pin, silent) {
+  $('err').textContent = silent ? '' : 'Checking\u2026';
+  $('btnLogin').disabled = true;
+  try {
+    const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'shifts', name, pin }) });
+    const j = await res.json();
+    if (!j.ok) {
+      $('err').textContent = j.error || 'Something went wrong.';
+      if (silent) { store('ms_name', null); store('ms_pin', null); }
+      showLogin(); return;
+    }
+    if ($('remember').checked) { store('ms_name', name); store('ms_pin', pin); }
+    S.name = j.name;
+    S.shifts = j.shifts.map(s => Object.assign({}, s, { d: parseDate(s.date) })).filter(s => s.d);
+    buildMonths();
+    $('err').textContent = '';
+    $('scrLogin').classList.add('hidden'); $('scrShifts').classList.remove('hidden'); $('btnOut').classList.remove('hidden');
+    $('hello').textContent = 'Hi ' + S.name + ', here are your shifts.';
+    render();
+  } catch (e) {
+    $('err').textContent = 'Couldn\'t connect. Please check your internet and try again.';
+    showLogin();
+  } finally {
+    $('btnLogin').disabled = false;
+  }
+}
+function showLogin() {
+  $('scrShifts').classList.add('hidden'); $('scrLogin').classList.remove('hidden'); $('btnOut').classList.add('hidden');
+}
+
+function buildMonths() {
+  const keys = new Set(S.shifts.map(s => monthKey(s.d)));
+  const now = new Date(); keys.add(monthKey(now));          // always include this month
+  S.months = [...keys].sort((a, b) => a - b);
+  S.idx = S.months.indexOf(monthKey(now));
+}
+
+function render() {
+  const key = S.months[S.idx];
+  const year = Math.floor(key / 100), month = key % 100;
+  $('monthTitle').textContent = MONTHS[month] + ' ' + year;
+  $('prev').disabled = S.idx <= 0;
+  $('next').disabled = S.idx >= S.months.length - 1;
+
+  const list = S.shifts.filter(s => monthKey(s.d) === key)
+    .sort((a, b) => a.d - b.d || String(a.start).localeCompare(String(b.start)));
+  const worked = list.filter(s => s.type === 'mine' && !isCancelled(s));
+  $('totShifts').textContent = worked.length;
+  $('totHours').textContent = worked.reduce((t, s) => t + num(s.hours), 0).toFixed(2);
+
+  const box = $('list');
+  if (!list.length) { box.innerHTML = '<div class="card empty muted">No shifts on the rota for this month.</div>'; return; }
+  let html = '', lastDay = '';
+  list.forEach(s => {
+    const dayLabel = s.d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    if (dayLabel !== lastDay) { html += `<div class="dayhead">${esc(dayLabel)}</div>`; lastDay = dayLabel; }
+    let cls = 'shift', badge = '', hrs = s.hours ? esc(s.hours) + ' hrs' : '';
+    if (s.type === 'coveredByOther') {
+      cls += ' off'; hrs = '';
+      badge = `<span class="badge b-off">Covered by ${esc(s.teacher)}${s.cover && s.cover !== 'No' ? ' (' + esc(s.cover) + ')' : ''}</span>`;
+    } else if (isCancelled(s)) {
+      cls += ' off'; hrs = '';
+      badge = '<span class="badge b-off">Cancelled</span>';
+    } else if (s.coveringFor) {
+      cls += ' covering';
+      badge = `<span class="badge b-cover">Covering for ${esc(s.coveringFor)}${s.cover && s.cover !== 'No' ? ' (' + esc(s.cover) + ')' : ''}</span>`;
+    }
+    html += `<div class="${cls}"><div class="main">
+        <div class="time">${esc(s.start)} \u2013 ${esc(s.end)}</div>
+        <div>${esc(s.venue)} \u00b7 ${esc(s.role)}</div>${badge}
+      </div><div class="hrs">${hrs}</div></div>`;
+  });
+  box.innerHTML = html;
+}
+
+$('prev').onclick = () => { if (S.idx > 0) { S.idx--; render(); } };
+$('next').onclick = () => { if (S.idx < S.months.length - 1) { S.idx++; render(); } };
+$('btnLogin').onclick = () => {
+  const name = $('name').value.trim(), pin = $('pin').value.trim();
+  if (!name || !pin) { $('err').textContent = 'Please enter your first name and PIN.'; return; }
+  login(name, pin, false);
+};
+$('pin').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnLogin').click(); });
+$('btnOut').onclick = () => { store('ms_name', null); store('ms_pin', null); S.shifts = []; $('pin').value = ''; showLogin(); };
+
+(function start() {
+  if (API_URL.indexOf('PASTE') === 0) {
+    $('err').textContent = 'Set-up not finished: the web app address hasn\'t been added to this page yet.';
+    $('btnLogin').disabled = true; return;
+  }
+  const n = load('ms_name'), p = load('ms_pin');
+  if (n && p) { $('name').value = n; login(n, p, true); }
+})();
+</script>
+</body>
+</html>
