@@ -34,7 +34,9 @@
   .monthbar button { background: var(--navy-soft); color: var(--navy); border: none; border-radius: 10px;
     padding: 10px 16px; font: inherit; font-weight: 700; font-size: 18px; cursor: pointer; }
   .monthbar button:disabled { opacity: .35; cursor: default; }
-  .monthbar h2 { flex: 1; text-align: center; margin: 0; font-size: 20px; }
+  .monthbar h2 { flex: 1; text-align: center; margin: 0; font-size: 19px; }
+  .monthbar h2 small { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 2px; }
+  .monthbar h2 small.now { color: var(--teal); }
   .totals { display: flex; gap: 10px; margin-bottom: 14px; }
   .tot { flex: 1; background: var(--lavender); border-radius: 12px; padding: 12px; text-align: center; }
   .tot b { display: block; font-size: 24px; }
@@ -89,9 +91,9 @@
   <section id="scrShifts" class="hidden">
     <p id="hello" style="margin-top:0;font-weight:700"></p>
     <div class="monthbar">
-      <button id="prev" aria-label="Previous month">&#9664;</button>
+      <button id="prev" aria-label="Previous">&#9664;</button>
       <h2 id="monthTitle"></h2>
-      <button id="next" aria-label="Next month">&#9654;</button>
+      <button id="next" aria-label="Next">&#9654;</button>
     </div>
     <div class="totals">
       <div class="tot"><b id="totShifts">0</b><span>shifts</span></div>
@@ -122,7 +124,8 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbxlG4vKA8j7JJRbrVk6RPmb
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const $ = id => document.getElementById(id);
-const S = { name: '', shifts: [], months: [], idx: 0 };
+const S = { name: '', shifts: [], views: [], idx: 0 };
+const AHEAD = 3;   // how many pay periods ahead teachers can look
 
 function store(k, v) { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
 function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -154,7 +157,7 @@ async function login(name, pin, silent) {
     if ($('remember').checked) { store('ms_name', name); store('ms_pin', pin); }
     S.name = j.name; S.pin = pin;
     S.shifts = j.shifts.map(s => Object.assign({}, s, { d: parseDate(s.date) })).filter(s => s.d);
-    buildMonths();
+    buildViews(j.payPeriods);
     $('err').textContent = '';
     $('scrLogin').classList.add('hidden'); $('scrShifts').classList.remove('hidden'); $('btnOut').classList.remove('hidden');
     $('hello').textContent = 'Hi ' + S.name + ', here are your shifts.';
@@ -170,28 +173,63 @@ function showLogin() {
   $('scrShifts').classList.add('hidden'); $('scrLogin').classList.remove('hidden'); $('btnOut').classList.add('hidden');
 }
 
-function buildMonths() {
+function sameDay(a, b) { return a.getTime() === b.getTime(); }
+function shortDate(d, withYear) {
+  return d.toLocaleDateString('en-GB', withYear ? { day: 'numeric', month: 'short', year: 'numeric' }
+                                                : { day: 'numeric', month: 'short' });
+}
+
+// Pay periods from the Pay Periods tab; if there aren't any, fall back to calendar months
+function buildViews(periods) {
+  const t = new Date(); const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
+  const list = (periods || []).map(p => ({ from: parseDate(p.start), to: parseDate(p.end) }))
+    .filter(p => p.from && p.to && p.to >= p.from)
+    .sort((a, b) => a.from - b.from);
+  if (list.length) {
+    let cur = list.findIndex(p => p.from <= today && today <= p.to);
+    if (cur < 0) {                                   // between periods: latest one that has started
+      cur = -1; list.forEach((p, i) => { if (p.from <= today) cur = i; });
+      if (cur < 0) cur = 0;
+    }
+    S.views = list.slice(0, cur + AHEAD + 1).map((p, i) => {
+      const sameYear = p.from.getFullYear() === p.to.getFullYear();
+      return { from: p.from, to: p.to,
+        title: shortDate(p.from, !sameYear) + ' \u2013 ' + shortDate(p.to, true),
+        tag: i === cur ? 'Current pay period' : (i < cur ? 'Previous pay period' : 'Upcoming pay period'),
+        now: i === cur };
+    });
+    S.idx = cur;
+    return;
+  }
   const keys = new Set(S.shifts.map(s => monthKey(s.d)));
-  const now = new Date(); keys.add(monthKey(now));          // always include this month
-  S.months = [...keys].sort((a, b) => a - b);
-  S.idx = S.months.indexOf(monthKey(now));
+  keys.add(monthKey(today));
+  S.views = [...keys].sort((a, b) => a - b).map(k => {
+    const y = Math.floor(k / 100), m = k % 100;
+    return { from: new Date(y, m, 1), to: new Date(y, m + 1, 0), title: MONTHS[m] + ' ' + y,
+             tag: k === monthKey(today) ? 'This month' : '', now: k === monthKey(today) };
+  });
+  S.idx = S.views.findIndex(v => v.now);
 }
 
 function render() {
-  const key = S.months[S.idx];
-  const year = Math.floor(key / 100), month = key % 100;
-  $('monthTitle').textContent = MONTHS[month] + ' ' + year;
+  const v = S.views[S.idx];
+  $('monthTitle').innerHTML = esc(v.title) + (v.tag ? `<small class="${v.now ? 'now' : ''}">${esc(v.tag)}</small>` : '');
   $('prev').disabled = S.idx <= 0;
-  $('next').disabled = S.idx >= S.months.length - 1;
+  $('next').disabled = S.idx >= S.views.length - 1;
 
-  const list = S.shifts.filter(s => monthKey(s.d) === key)
+  const list = S.shifts.filter(s => s.d >= v.from && s.d <= v.to)
     .sort((a, b) => a.d - b.d || String(a.start).localeCompare(String(b.start)));
   const worked = list.filter(s => s.type === 'mine' && !isCancelled(s));
   $('totShifts').textContent = worked.length;
   $('totHours').textContent = worked.reduce((t, s) => t + num(s.hours), 0).toFixed(2);
 
   const box = $('list');
-  if (!list.length) { box.innerHTML = '<div class="card empty muted">No shifts on the rota for this month.</div>'; return; }
+  if (!list.length) {
+    box.innerHTML = '<div class="card empty muted">' + (v.from > new Date()
+      ? 'No shifts on the rota for these dates yet. They\'ll appear here once the rota has been done.'
+      : 'No shifts on the rota for these dates.') + '</div>';
+    return;
+  }
   let html = '', lastDay = '';
   S.shown = [];
   list.forEach(s => {
@@ -256,7 +294,7 @@ function alertSent() {
 }
 
 $('prev').onclick = () => { if (S.idx > 0) { S.idx--; render(); } };
-$('next').onclick = () => { if (S.idx < S.months.length - 1) { S.idx++; render(); } };
+$('next').onclick = () => { if (S.idx < S.views.length - 1) { S.idx++; render(); } };
 $('btnLogin').onclick = () => {
   const name = $('name').value.trim(), pin = $('pin').value.trim();
   if (!name || !pin) { $('err').textContent = 'Please enter your first name, surname initial and PIN.'; return; }
