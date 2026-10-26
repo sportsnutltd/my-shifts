@@ -76,8 +76,8 @@
 <main>
   <section id="scrLogin" class="card">
     <h2 style="margin-top:0">Log in</h2>
-    <p class="muted">Use your first name as it appears on the rota, and the PIN you were given.</p>
-    <label for="name">First name</label>
+    <p class="muted">Use your first name and surname initial as they appear on the rota (e.g. Sarah J), and the PIN you were given.</p>
+    <label for="name">First name &amp; surname initial</label>
     <input type="text" id="name" autocomplete="username" autocapitalize="words">
     <label for="pin">PIN</label>
     <input type="password" id="pin" inputmode="numeric" autocomplete="current-password">
@@ -259,7 +259,7 @@ $('prev').onclick = () => { if (S.idx > 0) { S.idx--; render(); } };
 $('next').onclick = () => { if (S.idx < S.months.length - 1) { S.idx++; render(); } };
 $('btnLogin').onclick = () => {
   const name = $('name').value.trim(), pin = $('pin').value.trim();
-  if (!name || !pin) { $('err').textContent = 'Please enter your first name and PIN.'; return; }
+  if (!name || !pin) { $('err').textContent = 'Please enter your first name, surname initial and PIN.'; return; }
   login(name, pin, false);
 };
 $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnLogin').click(); });
