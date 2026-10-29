@@ -112,6 +112,10 @@
     border-radius: 12px; padding: 13px; font-weight: 700; margin-top: 10px; }
   .calbtn.light { background: var(--navy-soft); color: var(--navy); }
   .ok { color: var(--green); font-weight: 700; }
+  .updated { display: flex; justify-content: flex-end; align-items: center; gap: 6px; font-size: 13px;
+    color: var(--muted); margin: -6px 0 10px; }
+  .updated button { background: none; border: none; color: var(--navy); font: inherit; font-size: 13px;
+    font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }
   .done { text-align: center; padding: 6px 0 2px; }
   .done .tick { width: 56px; height: 56px; border-radius: 50%; background: var(--green-soft); color: var(--green);
     font-size: 30px; font-weight: 700; line-height: 56px; margin: 0 auto 10px; }
@@ -145,6 +149,7 @@
       <button class="tool" id="btnCal"><span>&#128241;</span>Add to calendar</button>
       <button class="tool hidden" id="btnTg"><span>&#128276;</span>Phone alerts</button>
     </div>
+    <div class="updated"><span id="upd"></span> &middot; <button id="btnRefresh">Refresh</button></div>
     <div id="offers"></div>
     <div class="monthbar">
       <button id="prev" aria-label="Previous">&#9664;</button>
@@ -263,6 +268,7 @@
 
 <script>
 /* ===================== SETTINGS ===================== */
+const PAGE_VERSION = '2026-10-29-1';   // changes with every new copy of this page
 const API_URL = 'https://script.google.com/macros/s/AKfycbxlG4vKA8j7JJRbrVk6RPmbUzEcgBBcbo_z2o9wsylxnWp1_oRic8Dx4-E4rdfQh32DyA/exec';
 /* ==================================================== */
 
@@ -326,6 +332,8 @@ async function login(name, pin, silent, keepView) {
     $('err').textContent = '';
     $('scrLogin').classList.add('hidden'); $('scrShifts').classList.remove('hidden'); $('btnOut').classList.remove('hidden');
     if (!keepView) $('hello').textContent = 'Hi ' + S.name + ', here are your shifts.';
+    S.loadedAt = Date.now();
+    $('upd').textContent = 'Updated ' + new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     render();
   } catch (e) {
     if (keepView) return;
@@ -694,6 +702,35 @@ $('btnLogin').onclick = () => {
 $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') $('btnLogin').click(); });
 $('btnOut').onclick = () => { store('ms_name', null); store('ms_pin', null); S.shifts = []; $('pin').value = ''; showLogin(); };
 document.querySelectorAll('.modal-bg').forEach(bg => bg.addEventListener('click', e => { if (e.target === bg) bg.classList.remove('show'); }));
+
+/* ---------- keeping the page up to date ---------- */
+function modalOpen() { return !!document.querySelector('.modal-bg.show'); }
+async function newerPage() {
+  try {
+    const r = await fetch(location.pathname + '?check=' + Date.now(), { cache: 'no-store' });
+    const m = (await r.text()).match(/PAGE_VERSION = '([^']+)'/);
+    return !!(m && m[1] !== PAGE_VERSION);
+  } catch (e) { return false; }
+}
+let checking = false;
+async function freshen(force) {
+  if (checking || !S.name || modalOpen() || $('scrShifts').classList.contains('hidden')) return;
+  if (!force && S.loadedAt && Date.now() - S.loadedAt < 60 * 1000) return;
+  checking = true;
+  try {
+    if (await newerPage()) { location.reload(); return; }
+    await refresh();
+  } finally { checking = false; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) freshen(false); });
+window.addEventListener('focus', () => freshen(false));
+window.addEventListener('pageshow', e => { if (e.persisted) freshen(true); });
+setInterval(() => { if (!document.hidden) freshen(true); }, 5 * 60 * 1000);
+$('btnRefresh').onclick = async () => {
+  $('upd').textContent = 'Updating\u2026';
+  await freshen(true);
+  if (S.loadedAt) $('upd').textContent = 'Updated ' + new Date(S.loadedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+};
 
 (function start() {
   if (API_URL.indexOf('PASTE') === 0) {
