@@ -383,8 +383,9 @@ function leaveFor(s) {
 }
 function statusBadge(status) {
   const st = (status || 'Pending');
-  const cls = st === 'Approved' ? 'b-approved' : st === 'Declined' ? 'b-declined' : 'b-pending';
-  const txt = st === 'Approved' ? 'Leave approved' : st === 'Declined' ? 'Leave declined' : 'Leave request pending';
+  const cls = st === 'Approved' ? 'b-approved' : (st === 'Declined' || st === 'Cancelled') ? 'b-declined' : 'b-pending';
+  const txt = st === 'Approved' ? 'Leave approved' : st === 'Declined' ? 'Leave declined'
+            : st === 'Cancelled' ? 'Leave cancelled' : 'Leave request pending';
   return `<span class="badge ${cls}">${txt}</span>`;
 }
 
@@ -496,7 +497,7 @@ function renderLeaveBox() {
 function openLeave() {
   const t = today0(), last = new Date(t.getFullYear(), t.getMonth(), t.getDate() + S.leaveDays);
   const requested = {};
-  S.leave.forEach(l => { if (l.status !== 'Declined') requested[skey(l)] = l.status || 'Pending'; });
+  S.leave.forEach(l => { if (l.status !== 'Declined' && l.status !== 'Cancelled') requested[skey(l)] = l.status || 'Pending'; });
   const list = S.shifts.filter(s => s.type === 'mine' && !isCancelled(s) && s.d > t && s.d <= last)
     .sort((a, b) => a.d - b.d || String(a.start).localeCompare(String(b.start)));
   let h = '';
