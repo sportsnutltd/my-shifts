@@ -112,6 +112,11 @@
     border-radius: 12px; padding: 13px; font-weight: 700; margin-top: 10px; }
   .calbtn.light { background: var(--navy-soft); color: var(--navy); }
   .ok { color: var(--green); font-weight: 700; }
+  .done { text-align: center; padding: 6px 0 2px; }
+  .done .tick { width: 56px; height: 56px; border-radius: 50%; background: var(--green-soft); color: var(--green);
+    font-size: 30px; font-weight: 700; line-height: 56px; margin: 0 auto 10px; }
+  .done h3 { margin: 0 0 6px; }
+  .done ul { text-align: left; margin: 12px 0 0; padding-left: 20px; font-size: 15px; }
 </style>
 </head>
 <body>
@@ -162,11 +167,19 @@
 <!-- Query -->
 <div class="modal-bg" id="qBg">
   <div class="modal">
+    <div id="qForm">
     <h3 id="qTitle">Send a query</h3>
     <div class="muted" id="qShift"></div>
     <textarea id="qText" maxlength="1500" placeholder="What would you like to ask? e.g. I swapped this shift with Chris B"></textarea>
     <div class="err" id="qErr"></div>
     <div class="row"><button class="btn light" id="qCancel">Cancel</button><button class="btn" id="qSend">Send</button></div>
+    </div>
+    <div id="qDone" class="done hidden">
+      <div class="tick">&#10003;</div>
+      <h3>Query sent</h3>
+      <p class="muted" style="margin:0">David has been emailed and will get back to you.</p>
+      <button class="btn" id="qOk">OK</button>
+    </div>
   </div>
 </div>
 
@@ -183,6 +196,7 @@
 <!-- Leave -->
 <div class="modal-bg" id="lBg">
   <div class="modal">
+    <div id="lForm">
     <h3>Request leave</h3>
     <p class="muted" style="margin-top:0">Tick the shifts you'd like off. Your request goes to Mark, and you'll see his answer here.</p>
     <div id="lList"></div>
@@ -192,6 +206,14 @@
     <textarea id="lReason" maxlength="500" placeholder="e.g. Family holiday"></textarea>
     <div class="err" id="lErr"></div>
     <div class="row"><button class="btn light" id="lCancel">Cancel</button><button class="btn" id="lSend">Send request</button></div>
+    </div>
+    <div id="lDone" class="done hidden">
+      <div class="tick">&#10003;</div>
+      <h3>Leave request sent</h3>
+      <p class="muted" style="margin:0">Mark has been emailed. You'll see his answer under <b>My leave requests</b><span id="lTgNote"> (and get a phone alert if you've turned them on)</span>.</p>
+      <ul id="lSummary"></ul>
+      <button class="btn" id="lOk">OK</button>
+    </div>
   </div>
 </div>
 
@@ -362,7 +384,7 @@ function leaveFor(s) {
 function statusBadge(status) {
   const st = (status || 'Pending');
   const cls = st === 'Approved' ? 'b-approved' : st === 'Declined' ? 'b-declined' : 'b-pending';
-  const txt = st === 'Approved' ? 'Leave approved' : st === 'Declined' ? 'Leave declined' : 'Leave requested';
+  const txt = st === 'Approved' ? 'Leave approved' : st === 'Declined' ? 'Leave declined' : 'Leave request pending';
   return `<span class="badge ${cls}">${txt}</span>`;
 }
 
@@ -492,10 +514,12 @@ function openLeave() {
   S.leaveList = list;
   $('lList').innerHTML = h;
   $('lOther').value = ''; $('lReason').value = ''; $('lErr').textContent = '';
+  $('lForm').classList.remove('hidden'); $('lDone').classList.add('hidden');
   $('lBg').classList.add('show');
 }
 $('btnLeave').onclick = openLeave;
 $('lCancel').onclick = () => $('lBg').classList.remove('show');
+$('lOk').onclick = () => $('lBg').classList.remove('show');
 $('lSend').onclick = async () => {
   const picks = [...$('lList').querySelectorAll('input[data-l]:checked')].map(c => S.leaveList[+c.dataset.l])
     .map(s => ({ date: s.date, venue: s.venue, start: s.start, end: s.end, role: s.role }));
@@ -505,9 +529,14 @@ $('lSend').onclick = async () => {
   try {
     const j = await api({ action: 'leave', shifts: picks, other, reason: $('lReason').value.trim() });
     if (!j.ok) { $('lErr').textContent = j.error || 'Couldn\'t send. Please try again.'; return; }
-    $('lBg').classList.remove('show');
-    flash('\u2713 Your leave request has been sent to Mark.');
-    await refresh();
+    $('lSummary').innerHTML = picks.map(s => {
+        const d = parseDate(s.date);
+        return `<li>${esc(d ? longDate(d) : s.date)}, ${esc(s.start)}\u2013${esc(s.end)}, ${esc(venueShort(s.venue))}</li>`;
+      }).join('') + (other ? `<li>${esc(other)}</li>` : '');
+    $('lTgNote').classList.toggle('hidden', !S.tg.linked);
+    $('lErr').textContent = '';
+    $('lForm').classList.add('hidden'); $('lDone').classList.remove('hidden');
+    refresh();
   } catch (e) {
     $('lErr').textContent = 'Couldn\'t send. Please check your internet and try again.';
   } finally { $('lSend').disabled = false; }
@@ -630,10 +659,12 @@ function openQuery(shift) {
     ? longDate(shift.d) + ' \u00b7 ' + shift.start + '\u2013' + shift.end + ' \u00b7 ' + shift.venue
     : 'Your message goes to David.';
   $('qText').value = ''; $('qErr').textContent = '';
+  $('qForm').classList.remove('hidden'); $('qDone').classList.add('hidden');
   $('qBg').classList.add('show');
   setTimeout(() => $('qText').focus(), 50);
 }
 $('qCancel').onclick = () => $('qBg').classList.remove('show');
+$('qOk').onclick = () => $('qBg').classList.remove('show');
 $('btnAsk').onclick = () => openQuery(null);
 $('qSend').onclick = async () => {
   const msg = $('qText').value.trim();
@@ -644,9 +675,9 @@ $('qSend').onclick = async () => {
     const j = await api({ action: 'query', message: msg, shift });
     if (!j.ok) { $('qErr').textContent = j.error || 'Couldn\'t send. Please try again.'; return; }
     if (qShift) qShift.queried = true;
-    $('qBg').classList.remove('show');
+    $('qErr').textContent = '';
+    $('qForm').classList.add('hidden'); $('qDone').classList.remove('hidden');
     render();
-    flash('\u2713 Your query has been sent. David will get back to you.');
   } catch (e) {
     $('qErr').textContent = 'Couldn\'t send. Please check your internet and try again.';
   } finally { $('qSend').disabled = false; }
